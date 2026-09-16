@@ -18,7 +18,7 @@
 - [x] 사용자가 제공한 아르피아 본문을 읽고 원작 요소와 간소화 제안을 구분.
 - [ ] 첫 캐릭터·마을의 실제 화면으로 도트 크기와 시점을 확인.
 - [x] 첫 체험 실행 환경과 제작 도구 결정: PC 브라우저, HTML Canvas + JavaScript. 좁은 화면에서는 화면 이동 버튼도 제공.
-- [x] 소유자 전용 배포 사이트 생성: [로팅월드 플레이](https://rotting-world-rpg.yujeonggg.chatgpt.site).
+- [x] 배포 사이트를 생성하고 링크가 있는 모든 사람이 접속할 수 있도록 공개: [로팅월드 플레이](https://rotting-world-rpg.yujeonggg.chatgpt.site).
 
 ## Phase 1 — 첫 마을을 걸어보기
 

@@ -5,7 +5,7 @@
 ## 배포 버전
 
 - 플레이: [로팅월드 배포 사이트](https://rotting-world-rpg.yujeonggg.chatgpt.site)
-- 공개 상태: 소유자 전용
+- 공개 상태: 링크가 있는 모든 사람
 - 배포 기준 버전: `4de1174` (`Add Water Drop Square minigame`)
 
 ## 로컬 실행
