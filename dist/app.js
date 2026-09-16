@@ -1,9 +1,11 @@
 import {WIDTH,HEIGHT,NPC,houses,trees,fences,VillageGame} from './game-core.js';
+import {BubbleGame,COLS,ROWS,CELL,isWall} from './bubble-core.js';
 const $=s=>document.querySelector(s),canvas=$('#world'),ctx=canvas.getContext('2d'),game=new VillageGame();
 const keys=new Set(),touchKeys=new Map(),town=new Image(),characters=new Image(),stage=$('#stage');
-let assetsReady=false,lastTime=0,previousView='',lastAction=0,cameraX=0;
+const miniCanvas=$('#bubble-game'),miniCtx=miniCanvas.getContext('2d'),bubbleGame=new BubbleGame();
+let assetsReady=false,lastTime=0,previousView='',lastAction=0,cameraX=0,miniActive=false,miniView='',lastMiniMove=0;
 const ground=document.createElement('canvas');ground.width=WIDTH;ground.height=HEIGHT;const g=ground.getContext('2d');
-ctx.imageSmoothingEnabled=false;g.imageSmoothingEnabled=false;
+ctx.imageSmoothingEnabled=false;g.imageSmoothingEnabled=false;miniCtx.imageSmoothingEnabled=false;
 function tile(c,image,col,row,x,y,w=16,h=16){c.drawImage(image,col*16,row*16,16,16,Math.round(x),Math.round(y),w,h);}
 function randomAt(x,y){let n=((x+17)*374761393+(y+31)*668265263)|0;n=(n^(n>>>13))*1274126177;return((n^(n>>>16))>>>0)/4294967295;}
 function pathAt(x,y){return(y>=9&&y<=11&&x>=3&&x<=28)||(x>=15&&x<=17&&y>=5&&y<=18)||(x>=12&&x<=20&&y>=8&&y<=13)||(x>=6&&x<=8&&y>=7&&y<=16)||(x>=24&&x<=26&&y>=7&&y<=16);}
@@ -45,6 +47,64 @@ function render(){
  layers.sort((a,b)=>a.y-b.y).forEach(layer=>layer.draw());
  if(game.canTalk()){ctx.strokeStyle='#fff4b3';ctx.lineWidth=1;ctx.strokeRect(Math.round(NPC.x-10),Math.round(NPC.y-17),20,20);}
 }
+function drawPixelStar(c,x,y){
+ c.fillStyle='#ffe478';c.fillRect(x+13,y+5,6,22);c.fillRect(x+5,y+13,22,6);c.fillStyle='#fff6bd';c.fillRect(x+13,y+8,4,8);c.fillRect(x+8,y+13,8,4);
+}
+function renderMiniGame(){
+ for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+  const px=x*CELL,py=y*CELL;
+  miniCtx.fillStyle=(x+y)%2?'#69bda3':'#73c7a9';miniCtx.fillRect(px,py,CELL,CELL);
+  miniCtx.fillStyle='#7bd0b4';miniCtx.fillRect(px+3,py+3,2,2);miniCtx.fillRect(px+24,py+20,2,2);
+  if(isWall(x,y)){
+   miniCtx.fillStyle='#236472';miniCtx.fillRect(px,py,CELL,CELL);miniCtx.fillStyle='#397f88';miniCtx.fillRect(px+3,py+3,CELL-6,CELL-6);miniCtx.fillStyle='#4e98a0';miniCtx.fillRect(px+5,py+5,CELL-10,5);miniCtx.fillStyle='#1b5260';miniCtx.fillRect(px+5,py+22,CELL-10,5);
+  }
+ }
+ for(const crateKey of bubbleGame.crates){
+  const [x,y]=crateKey.split(',').map(Number),px=x*CELL,py=y*CELL;
+  miniCtx.fillStyle='#754d32';miniCtx.fillRect(px+3,py+4,26,25);miniCtx.fillStyle='#b67a44';miniCtx.fillRect(px+6,py+7,20,19);miniCtx.fillStyle='#e2a85c';miniCtx.fillRect(px+8,py+9,16,4);miniCtx.fillStyle='#71432e';miniCtx.fillRect(px+7,py+21,18,4);miniCtx.fillRect(px+14,py+7,4,18);
+ }
+ for(const [dropKey] of bubbleGame.drops){const [x,y]=dropKey.split(',').map(Number);drawPixelStar(miniCtx,x*CELL,y*CELL);}
+ for(const bomb of bubbleGame.bombs){
+  const px=bomb.x*CELL,py=bomb.y*CELL,pulse=Math.floor((1.65-bomb.fuse)*8)%2;
+  miniCtx.fillStyle=pulse?'#67daf0':'#4cb7d4';miniCtx.beginPath();miniCtx.arc(px+16,py+18,11,0,Math.PI*2);miniCtx.fill();miniCtx.fillStyle='#d9fbff';miniCtx.fillRect(px+10,py+11,5,4);miniCtx.fillStyle='#30546a';miniCtx.fillRect(px+15,py+4,4,5);miniCtx.fillStyle='#ffe16d';miniCtx.fillRect(px+19,py+2,4,4);
+ }
+ for(const blast of bubbleGame.blasts)for(const cell of blast.cells){
+  const px=cell.x*CELL,py=cell.y*CELL,alpha=Math.min(1,blast.ttl*4);
+  miniCtx.fillStyle=`rgba(196,247,255,${alpha})`;miniCtx.fillRect(px+3,py+10,26,12);miniCtx.fillRect(px+10,py+3,12,26);miniCtx.fillStyle=`rgba(91,210,241,${alpha})`;miniCtx.fillRect(px+7,py+14,18,4);miniCtx.fillRect(px+14,py+7,4,18);
+ }
+ if(!(bubbleGame.invulnerable>0&&Math.floor(bubbleGame.invulnerable*10)%2)){
+  const px=bubbleGame.player.x*CELL,py=bubbleGame.player.y*CELL;
+  miniCtx.fillStyle='#174e5060';miniCtx.fillRect(px+8,py+25,16,3);
+  miniCtx.drawImage(characters,0,7*16,16,16,px+4,py+2,24,24);
+ }
+}
+function updateMiniUI(){
+ const signature=JSON.stringify([miniActive,bubbleGame.status,Math.ceil(bubbleGame.timeLeft),bubbleGame.lives,bubbleGame.collected,bubbleGame.bombs.length,bubbleGame.message]);
+ if(signature===miniView)return;miniView=signature;
+ $('#mini-layer').hidden=!miniActive;
+ $('#mini-time').textContent=Math.ceil(bubbleGame.timeLeft);
+ $('#mini-lives').textContent=bubbleGame.lives;
+ $('#mini-score').textContent=`${bubbleGame.collected} / 3`;
+ $('#mini-message').textContent=bubbleGame.message;
+ $('#mini-intro').hidden=bubbleGame.status!=='idle';
+ const finished=bubbleGame.status==='won'||bubbleGame.status==='lost';
+ $('#mini-result').hidden=!finished;
+ $('#mini-bomb').disabled=bubbleGame.status!=='playing'||bubbleGame.bombs.length>=1;
+ if(finished){
+  const won=bubbleGame.status==='won';
+  $('#mini-result-kicker').textContent=won?'ROUND CLEAR':'TRY AGAIN';
+  $('#mini-result-title').textContent=won?'빛방울 수집 완료!':'광장 놀이 종료';
+  $('#mini-result-text').textContent=won?`${Math.ceil(bubbleGame.timeLeft)}초를 남기고 성공했어요.`:bubbleGame.message;
+ }
+}
+function openMiniGame(){
+ resetInput();if(game.dialogue)game.closeDialogue();game.paused=true;miniActive=true;miniView='';updateUI();updateMiniUI();renderMiniGame();$('#mini-start').focus();
+}
+function closeMiniGame(){
+ miniActive=false;game.paused=false;resetInput();miniView='';updateMiniUI();updateUI();$('#minigame').focus();
+}
+function startMiniGame(){bubbleGame.start();miniView='';updateMiniUI();renderMiniGame();miniCanvas.focus?.();}
+function miniMove(dx,dy){if(bubbleGame.move(dx,dy)){renderMiniGame();miniView='';updateMiniUI();}}
 function updateMarkers(){
  const box=stage.getBoundingClientRect(),mobile=window.innerWidth<=600,scale=box.height/HEIGHT;
  cameraX=mobile?Math.max(0,Math.min(WIDTH-box.width/scale,game.player.x-box.width/scale/2)):0;
@@ -71,12 +131,22 @@ function interact(){if(performance.now()-lastAction<180)return;lastAction=perfor
 function openDialog(id){resetInput();game.paused=true;$(id).showModal();updateUI();}
 $('#start').addEventListener('click',start);$('#interact').addEventListener('click',interact);$('#next-dialogue').addEventListener('click',interact);
 $('#help').addEventListener('click',()=>openDialog('#help-dialog'));$('#menu').addEventListener('click',()=>openDialog(game.screen==='title'?'#help-dialog':'#menu-dialog'));
+$('#minigame').addEventListener('click',openMiniGame);$('#mini-exit').addEventListener('click',closeMiniGame);$('#mini-home').addEventListener('click',closeMiniGame);
+$('#mini-start').addEventListener('click',startMiniGame);$('#mini-retry').addEventListener('click',startMiniGame);$('#mini-bomb').addEventListener('click',()=>{bubbleGame.placeBomb();miniView='';updateMiniUI();renderMiniGame();});
+document.querySelectorAll('[data-mini-direction]').forEach(button=>button.addEventListener('click',()=>{const vectors={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};miniMove(...vectors[button.dataset.miniDirection]);}));
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
 document.querySelectorAll('dialog').forEach(d=>d.addEventListener('close',()=>{resetInput();game.paused=false;updateUI();}));
 $('#back-to-title').addEventListener('click',()=>{$('#menu-dialog').close();game.toTitle();resetInput();updateUI();$('#start').focus();});
 $('#retry').addEventListener('click',()=>location.reload());
 const directionKeys={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
 document.addEventListener('keydown',e=>{
+ if(miniActive){
+  const vectors={ArrowUp:[0,-1],w:[0,-1],W:[0,-1],ArrowDown:[0,1],s:[0,1],S:[0,1],ArrowLeft:[-1,0],a:[-1,0],A:[-1,0],ArrowRight:[1,0],d:[1,0],D:[1,0]};
+  if(vectors[e.key]){e.preventDefault();const now=performance.now();if(now-lastMiniMove>85){miniMove(...vectors[e.key]);lastMiniMove=now;}return;}
+  if((e.code==='Space'||e.key===' ')&&!e.repeat){e.preventDefault();bubbleGame.placeBomb();miniView='';updateMiniUI();renderMiniGame();return;}
+  if(e.key==='Escape'&&!e.repeat){e.preventDefault();closeMiniGame();return;}
+  return;
+ }
  if(document.querySelector('dialog[open]'))return;
  if(directionKeys[e.key]&&game.screen==='playing'){e.preventDefault();keys.add(e.code);return;}
  if(e.repeat)return;
@@ -92,7 +162,7 @@ document.querySelectorAll('[data-direction]').forEach(b=>{
  const release=e=>touchKeys.delete(e.pointerId);b.addEventListener('pointerup',release);b.addEventListener('pointercancel',release);b.addEventListener('lostpointercapture',release);
 });
 function held(direction){const codes={up:['KeyW','ArrowUp'],down:['KeyS','ArrowDown'],left:['KeyA','ArrowLeft'],right:['KeyD','ArrowRight']};return codes[direction].some(k=>keys.has(k))||[...touchKeys.values()].includes(direction);}
-function loop(time){const dt=lastTime?(time-lastTime)/1000:0;lastTime=time;game.step(Number(held('right'))-Number(held('left')),Number(held('down'))-Number(held('up')),dt);render();updateUI();updateMarkers();requestAnimationFrame(loop);}
+function loop(time){const dt=lastTime?(time-lastTime)/1000:0;lastTime=time;if(miniActive){bubbleGame.update(dt);renderMiniGame();updateMiniUI();}else game.step(Number(held('right'))-Number(held('left')),Number(held('down'))-Number(held('up')),dt);render();updateUI();updateMarkers();requestAnimationFrame(loop);}
 function load(image,url){return new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=url;});}
 Promise.all([load(town,'assets/town.png'),load(characters,'assets/characters.png')]).then(()=>{assetsReady=true;drawGround();$('#start').disabled=false;$('#start-label').textContent='모험 시작하기';updateUI();requestAnimationFrame(loop);}).catch(()=>{$('#asset-error').hidden=false;});
 if(document.modelContext?.registerTool){
@@ -106,6 +176,10 @@ if(document.modelContext?.registerTool){
  const vector={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[input.direction];let remaining=input.seconds;while(remaining>0){const dt=Math.min(.016,remaining);game.step(...vector,dt);remaining-=dt;}
  game.moving=false;render();updateUI();updateMarkers();return game.snapshot();}},
  {name:'talk_to_village_guide',description:'안내인 가까이에서 대화를 시작하거나 한 문장 진행합니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:()=>{if(game.paused)throw Error('메뉴를 먼저 닫아주세요.');if(game.dialogue)game.nextDialogue();else if(!game.interact())throw Error('루미 가까이에서 말을 걸어주세요.');resetInput();updateUI();return game.snapshot();}}
+ ,{name:'start_water_square',description:'물풍선으로 상자를 부수고 빛방울 세 개를 찾는 물방울 광장 미니게임을 시작합니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:()=>{openMiniGame();startMiniGame();return bubbleGame.snapshot();}}
+ ,{name:'read_water_square',description:'물방울 광장의 남은 시간, 생명, 빛방울 수와 현재 위치를 읽습니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute:()=>bubbleGame.snapshot()}
+ ,{name:'move_in_water_square',description:'물방울 광장에서 한 칸 이동합니다.',inputSchema:{type:'object',properties:{direction:{type:'string',enum:['up','down','left','right']}},required:['direction'],additionalProperties:false},execute:input=>{if(!miniActive||bubbleGame.status!=='playing')throw Error('물방울 광장 놀이를 먼저 시작해주세요.');const vector={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[input?.direction];if(!vector)throw Error('유효한 방향을 입력하세요.');bubbleGame.move(...vector);renderMiniGame();miniView='';updateMiniUI();return bubbleGame.snapshot();}}
+ ,{name:'place_water_balloon',description:'플레이어가 서 있는 칸에 물풍선 하나를 놓습니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:()=>{if(!miniActive||!bubbleGame.placeBomb())throw Error('지금은 물풍선을 놓을 수 없습니다.');miniView='';updateMiniUI();renderMiniGame();return bubbleGame.snapshot();}}
  ];
  for(const d of definitions){try{Promise.resolve(document.modelContext.registerTool({...d,annotations:{readOnlyHint:false,untrustedContentHint:false,...d.annotations}},{signal:lifecycle.signal})).catch(()=>{});}catch{}}
  window.addEventListener('pagehide',()=>lifecycle.abort(),{once:true});
