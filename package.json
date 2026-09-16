@@ -1,0 +1,7 @@
+{
+  "name": "rotting-world",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node server.mjs", "check": "node --check dist/app.js && node --check dist/game-core.js", "test": "node --test tests/village.test.mjs" }
+}
